@@ -266,6 +266,7 @@ details.more .actions{margin-top:10px}
     <div class="actions">
       <button class="btn" type="button" id="btnCopiar">Copiar texto</button>
       <button class="btn primary" type="button" id="btnZap">Enviar no WhatsApp</button>
+      <button class="btn ghost wide" type="button" id="btnShare">Compartilhar em outro app</button>
       <button class="btn ghost wide" type="button" id="btnNovo">Começar novo rateio</button>
     </div>
 
@@ -352,6 +353,18 @@ function calcular(S){
           n:n,nFixos:fixos.length,base:base,resto:resto,falta:falta,sobra:sobra,valores:valores,arrecadar:arrecadar};
 }
 // </calc>
+
+// <zap>
+function urlWhatsApp(texto,android){
+  var q=encodeURIComponent(texto);
+  var web='https://wa.me/?text='+q;
+  if(android){
+    // força o WhatsApp pessoal (com.whatsapp) em vez do Business (com.whatsapp.w4b)
+    return 'intent://send?text='+q+'#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url='+encodeURIComponent(web)+';end';
+  }
+  return web;
+}
+// </zap>
 
 function fmt(c){return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
 function fmtT(c){return fmt(c).replace(/\u00a0/g,' ');}
@@ -709,7 +722,13 @@ $('#btnCopiar').addEventListener('click',function(){
   copiar(textoRateio()).then(function(){toast('Texto copiado');},function(){toast('Não foi possível copiar');});
 });
 $('#btnZap').addEventListener('click',function(){
-  window.open('https://wa.me/?text='+encodeURIComponent(textoRateio()),'_blank');
+  var android=/Android/i.test(navigator.userAgent);
+  var url=urlWhatsApp(textoRateio(),android);
+  if(android) window.location.href=url; else window.open(url,'_blank');
+});
+if(!navigator.share) $('#btnShare').hidden=true;
+$('#btnShare').addEventListener('click',function(){
+  navigator.share({text:textoRateio()}).catch(function(){});
 });
 
 /* Novo rateio */
