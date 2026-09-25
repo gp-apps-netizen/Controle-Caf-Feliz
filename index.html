@@ -116,6 +116,13 @@ input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visi
 .r-hero .label{color:var(--paper-muted);font-size:15px}
 .r-hero .big{font-size:clamp(42px,15vw,62px);font-weight:800;line-height:1.05;letter-spacing:-.035em;font-variant-numeric:tabular-nums;margin-top:2px}
 .r-empty{margin-top:14px;color:var(--paper-muted)}
+.r-items{list-style:none;padding:12px 0 0;margin-top:14px;border-top:1.5px dashed var(--paper-line);display:grid;gap:8px}
+.r-items li{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-variant-numeric:tabular-nums}
+.r-items .nm{min-width:0;overflow-wrap:anywhere;line-height:1.2;font-weight:600}
+.r-items .qt{display:block;font-size:14px;font-weight:400;color:var(--paper-muted)}
+.r-items .vl{white-space:nowrap}
+.btn-nota{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 16px}
+.btn-nota:disabled{opacity:.6}
 .r-pix{margin-top:16px;border-top:1.5px dashed var(--paper-line);padding-top:14px;display:grid;gap:6px}
 .r-pix .k{font-size:14px;color:var(--paper-muted)}
 .r-pix .v{font-weight:700;font-size:17px;overflow-wrap:anywhere;line-height:1.25}
@@ -356,6 +363,7 @@ details.more .actions{margin-top:10px}
     <label class="field titulo-field"><span>Chave Pix para receber (opcional)</span><input id="pix" type="text" placeholder="CPF, celular, e-mail ou chave aleatória" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
 
     <article class="receipt" id="receipt" aria-live="polite"></article>
+    <button class="btn btn-nota" type="button" id="btnNota"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.8l7.4-4.3M8.3 13.2l7.4 4.3"/></svg>Compartilhar nota</button>
 
     <div id="avisos"></div>
 
@@ -605,6 +613,13 @@ function renderRateio(){
   var titulo=(S.titulo||'').trim();
   var h='<div class="r-title">'+esc(titulo||'Café feliz')+'</div>';
   if(titulo) h+='<div class="r-sub">Rateio de Café Feliz</div>';
+  if(S.itens.length){
+    h+='<ul class="r-items">'+S.itens.map(function(i){
+      return '<li><span class="nm">'+esc(i.nome.trim()||'Item')+
+        (i.qtd>1?'<span class="qt">'+i.qtd+' × '+fmt(i.valor)+'</span>':'')+
+        '</span><span class="vl">'+fmt(i.qtd*i.valor)+'</span></li>';
+    }).join('')+'</ul>';
+  }
   h+='<div class="r-lines">'+
        '<div class="r-line"><span>Produtos</span><span>'+fmt(c.produtos)+'</span></div>'+
        '<div class="r-line"><span>Frete</span><span>'+fmt(c.frete)+'</span></div>'+
@@ -872,6 +887,136 @@ $('#btnZap').addEventListener('click',function(){
 if(!navigator.share) $('#btnShare').hidden=true;
 $('#btnShare').addEventListener('click',function(){
   navigator.share({text:textoRateio()}).catch(function(){});
+});
+
+/* Nota como imagem */
+function gerarNota(){
+  var fontes=[];
+  if(document.fonts&&document.fonts.load){
+    fontes=["400 26px 'Black Ops One'","400 16px 'Barlow Semi Condensed'","600 16px 'Barlow Semi Condensed'","700 16px 'Barlow Semi Condensed'"]
+      .map(function(f){return document.fonts.load(f).catch(function(){});});
+  }
+  return Promise.all(fontes).then(function(){
+    var c=calcular(S),titulo=(S.titulo||'').trim(),pix=(S.pix||'').trim();
+    var W=420,M=16,P=24,X0=M+P,X1=W-M-P,IW=X1-X0,SC=3;
+    var F="'Barlow Semi Condensed','Roboto Condensed','Arial Narrow',sans-serif";
+    var ST="'Black Ops One','Arial Black',Impact,sans-serif";
+    var INK='#23261A',MUT='#5E5F48',LIN='#A59E7F',PAP='#D9D2B4',BG='#1C2016',BIG='#2F3524';
+    var cv=document.createElement('canvas'),ctx=cv.getContext('2d');
+    var ops=[],y=M+10+26;
+    function fo(sz,w,fam){return (w||400)+' '+sz+'px '+(fam||F);}
+    function larg(t,f,esp){ctx.font=f;return ctx.measureText(t).width+(esp||0)*t.length;}
+    function quebrar(t,f,max,esp){
+      var pal=String(t).split(/\s+/),ls=[],at='';
+      pal.forEach(function(w){
+        var tst=at?at+' '+w:w;
+        if(!at||larg(tst,f,esp)<=max){at=tst;return;}
+        ls.push(at);at=w;
+      });
+      if(at) ls.push(at);
+      return ls.length?ls:[''];
+    }
+    function tx(t,x,yy,f,cor,al,esp){ops.push(function(){
+      ctx.font=f;ctx.fillStyle=cor;ctx.textAlign=al||'left';ctx.textBaseline='top';
+      if('letterSpacing' in ctx) ctx.letterSpacing=(esp||0)+'px';
+      ctx.fillText(t,x,yy);
+      if('letterSpacing' in ctx) ctx.letterSpacing='0px';
+    });}
+    function trac(yy){ops.push(function(){
+      ctx.strokeStyle=LIN;ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.moveTo(X0,yy);ctx.lineTo(X1,yy);ctx.stroke();ctx.setLineDash([]);
+    });}
+    function linha(esq,dir,f,cor,lh){
+      var ls=quebrar(esq,f,IW-larg(dir,f)-14);
+      ls.forEach(function(l,i){tx(l,X0,y,f,cor);if(i===0) tx(dir,X1,y,f,cor,'right');y+=lh;});
+    }
+    // Título
+    var fT=fo(26,400,ST);
+    quebrar((titulo||'Café feliz').toUpperCase(),fT,IW,1).forEach(function(l){tx(l,X0,y,fT,INK,'left',1);y+=30;});
+    if(titulo){y+=2;tx('Rateio de Café Feliz',X0,y,fo(15),MUT);y+=20;}
+    // Itens
+    if(S.itens.length){
+      y+=12;trac(y);y+=14;
+      S.itens.forEach(function(i,k){
+        if(k) y+=8;
+        linha(i.nome.trim()||'Item',fmtT(i.qtd*i.valor),fo(17,600),INK,21);
+        if(i.qtd>1){tx(i.qtd+' × '+fmtT(i.valor),X0,y,fo(14),MUT);y+=18;}
+      });
+    }
+    // Totais
+    y+=12;trac(y);y+=12;
+    linha('Produtos',fmtT(c.produtos),fo(17),INK,24);
+    linha('Frete',fmtT(c.frete),fo(17),INK,24);
+    y+=4;trac(y);y+=10;
+    linha('Total',fmtT(c.total),fo(20,700),INK,28);
+    if(c.nFixos>0){
+      linha('Valores diferentes','− '+fmtT(c.somaFixos),fo(17),MUT,24);
+      linha('A dividir',fmtT(c.aDividir),fo(17),INK,24);
+    }
+    // Destaque
+    y+=10;trac(y);y+=18;
+    if(!S.pessoas.length){
+      quebrar('Adicione os participantes para ver o valor de cada um.',fo(16),IW).forEach(function(l){tx(l,X0,y,fo(16),MUT);y+=21;});
+    }else{
+      var rot=c.n===0?'NINGUÉM COM SITUAÇÃO NORMAL':'CADA UM PAGA ('+c.n+(c.n===1?' PESSOA':' PESSOAS')+')';
+      tx(rot,W/2,y,fo(14,700),MUT,'center',1.2);y+=24;
+      var val=c.n===0?'—':fmtT(c.base),sz=58;
+      while(sz>30&&larg(val,fo(sz,400,ST))>IW) sz-=2;
+      tx(val,W/2,y,fo(sz,400,ST),BIG,'center');y+=sz+6;
+      if(c.resto>0){
+        var ob=c.resto+(c.resto===1?' pessoa paga ':' pessoas pagam ')+fmtT(c.base+1)+' para fechar a conta';
+        quebrar(ob,fo(14),IW).forEach(function(l){tx(l,W/2,y,fo(14),MUT,'center');y+=18;});
+      }
+    }
+    // Pix
+    if(pix){
+      y+=12;trac(y);y+=14;
+      tx('Pague por Pix para',X0,y,fo(15),MUT);y+=22;
+      var fp=fo(20,700);
+      var lp=larg(pix,fp)<=IW?[pix]:(pix.match(new RegExp('.{1,'+Math.max(8,Math.floor(pix.length*IW/larg(pix,fp)))+'}','g'))||[pix]);
+      lp.forEach(function(l){tx(l,X0,y,fp,INK);y+=25;});
+    }
+    y+=20;
+    var fim=y,H=fim+8+M+8;
+    cv.width=W*SC;cv.height=Math.ceil(H*SC);
+    ctx=cv.getContext('2d');ctx.scale(SC,SC);
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=PAP;ctx.fillRect(M,M,W-2*M,fim-M);
+    // serrilhado
+    ctx.beginPath();
+    for(var x=M;x<W-M;x+=16){ctx.moveTo(x,fim);ctx.lineTo(Math.min(x+8,W-M),fim+8);ctx.lineTo(Math.min(x+16,W-M),fim);}
+    ctx.fill();
+    // faixa zebrada
+    ctx.save();ctx.beginPath();ctx.rect(M,M,W-2*M,10);ctx.clip();
+    ctx.fillStyle='#15170F';ctx.fillRect(M,M,W-2*M,10);
+    ctx.fillStyle='#E0B42E';
+    for(var z=M-20;z<W;z+=20){ctx.beginPath();ctx.moveTo(z,M+10);ctx.lineTo(z+10,M+10);ctx.lineTo(z+20,M);ctx.lineTo(z+10,M);ctx.closePath();ctx.fill();}
+    ctx.restore();
+    ops.forEach(function(o){o();});
+    return new Promise(function(ok,err){cv.toBlob(function(b){b?ok(b):err();},'image/png');});
+  });
+}
+function baixarArquivo(blob,nome){
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=nome;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+}
+$('#btnNota').addEventListener('click',function(){
+  var b=this;b.disabled=true;
+  var base=((S.titulo||'').trim()||'rateio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w]+/g,'-').replace(/^-|-$/g,'').toLowerCase()||'rateio';
+  var nome='nota-'+base+'.png';
+  gerarNota().then(function(blob){
+    var arq=null;
+    try{arq=new File([blob],nome,{type:'image/png'});}catch(e){}
+    if(arq&&navigator.canShare&&navigator.canShare({files:[arq]})){
+      return navigator.share({files:[arq],title:'Rateio de Café Feliz'}).catch(function(e){
+        if(!e||e.name!=='AbortError'){baixarArquivo(blob,nome);toast('Imagem da nota salva');}
+      });
+    }
+    baixarArquivo(blob,nome);toast('Imagem da nota salva');
+  }).catch(function(){toast('Não foi possível gerar a imagem');})
+    .then(function(){b.disabled=false;});
 });
 
 /* Novo rateio */
